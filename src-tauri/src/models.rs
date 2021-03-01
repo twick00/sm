@@ -1,5 +1,7 @@
 use crate::schema::*;
 use serde::{Serialize, Serializer};
+use std::path::Component;
+use std::path::Path;
 use tauri::plugin::Plugin;
 
 #[derive(Debug, Queryable, Insertable)]
@@ -25,7 +27,7 @@ pub struct FileDiffResult {
   pub id: Option<i32>,
   pub original_file_id: Option<i32>,
   pub change_event: String,
-  pub file_path: String,
+  pub file_path: Vec<String>,
   pub data: String,
   pub timestamp: i32,
 }
@@ -37,7 +39,17 @@ impl std::convert::From<&FileDiff> for FileDiffResult {
       id: file_diff.id,
       original_file_id: file_diff.original_file_id.clone(),
       change_event: file_diff.change_event.clone(),
-      file_path: file_diff.file_path.clone(),
+      // Javascript isn't great at parsing path components in a cross-platform way so let rust handle it
+      file_path: Path::new(&file_diff.file_path)
+        .components()
+        .into_iter()
+        .fold(Vec::new(), |mut a: Vec<String>, b: Component| {
+          match b {
+            Component::Normal(segment) => a.push(segment.to_str().unwrap().to_string()),
+            _ => {}
+          }
+          a
+        }),
       data: std::str::from_utf8(&file_diff.data).unwrap().to_string(),
       timestamp: file_diff.timestamp.clone(),
     }

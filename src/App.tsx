@@ -1,27 +1,21 @@
-import "bootstrap/dist/css/bootstrap.css";
 import React, { useEffect, useState } from "react";
 import * as dialog from "tauri/api/dialog";
 import * as req from "tauri/api/tauri";
-import {
-  Button,
-  Card,
-  Col,
-  Container,
-  Nav,
-  Navbar,
-  Row,
-} from "react-bootstrap";
 import { html } from "diff2html";
 import ReactHtmlParser from "react-html-parser";
 import FileList from "./components/FileList";
 import { castArray, find } from "lodash";
 import { fileNameFromPath } from "./utils/fileUtils";
+import { Button, Navbar } from "@blueprintjs/core";
+import Navigation from "./components/Navigation";
+import { Container, Row, Col } from "react-grid-system";
 
 type FileDetails = {
   path: string;
   fileName: string;
 };
 
+const Card = ({ children }: any) => <div>{children}</div>;
 function App() {
   const [state, setState] = useState<{
     watchedFiles: Array<FileDetails>;
@@ -130,56 +124,10 @@ function App() {
   };
 
   return (
-    <Container
-      fluid={true}
-      className="App px-0"
-      // style={{ minHeight: "100vh", padding: 0, margin: 0 }}
-    >
-      <Navbar bg="dark" variant="dark">
-        <Navbar.Brand>Cud SM</Navbar.Brand>
-        <Nav className="mr-auto">
-          <Nav.Link>Some stuff</Nav.Link>
-        </Nav>
-        <Nav>
-          <Nav.Item>
-            <Button
-              className={"mr-2"}
-              variant={"outline-primary"}
-              onClick={addFilesButton}
-            >
-              + Add Files
-            </Button>
-            <Button variant={"outline-primary"} onClick={addDirButton}>
-              + Add Folder
-            </Button>
-          </Nav.Item>
-        </Nav>
-      </Navbar>
-      <Container fluid className={"p-2 pt-3"}>
-        <Row className={"m-0"}>
-          <Col xs={6}>
-            <FileList fileList={state.watchedFiles} onClick={clickedItem} />
-          </Col>
-          <Col xs={6}>
-            <Card className={"h-100 overflow-auto"}>
-              {state.selectedFile ? (
-                <Card.Body>
-                  <Card.Title>{state.selectedFile.fileName}</Card.Title>
-                  <Card.Text>{state.selectedFile.path}</Card.Text>
-                  {state.selectedFileDetails ? (
-                    <Card.Text>{state.selectedFileDetails}</Card.Text>
-                  ) : (
-                    "Oops"
-                  )}
-                </Card.Body>
-              ) : (
-                <Card.Body>No Details To Show</Card.Body>
-              )}
-            </Card>
-          </Col>
-        </Row>
-      </Container>
-    </Container>
+    <>
+      <Navigation />
+      <FileList />
+    </>
   );
 }
 

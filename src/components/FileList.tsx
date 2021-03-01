@@ -1,6 +1,12 @@
 import React, { FunctionComponent } from "react";
-import { Button, Card, Col, ListGroup, Row } from "react-bootstrap";
 import { noop } from "lodash";
+import { HTMLTable, ITreeNode, Text, Tree, TreeNode } from "@blueprintjs/core";
+import { Col, Container, Row } from "react-grid-system";
+import { Table } from "@blueprintjs/table";
+
+const Button = ({ children }: any) => <div>{children}</div>;
+const Card = ({ children }: any) => <div>{children}</div>;
+const ListGroup = ({ children }: any) => <div>{children}</div>;
 
 type File = {
   path: string;
@@ -15,36 +21,52 @@ interface OwnProps {
 
 type Props = OwnProps;
 
+interface FileTreeProps {}
+
+const t: ITreeNode[] = [
+  {
+    id: 0,
+    hasCaret: true,
+    icon: "folder-close",
+    label: "Folder 0",
+  },
+  {
+    id: 0,
+    hasCaret: true,
+    icon: "folder-close",
+    label: "Folder 0",
+  },
+  {
+    id: 0,
+    hasCaret: true,
+    icon: "folder-close",
+    label: "Folder 0",
+  },
+];
+
+const FileTree: FunctionComponent<FileTreeProps> = (props) => {
+  return (
+    <Tree contents={t}>
+      <TreeNode depth={1} path={[1, 2, 3]} id={"1"} label={"Test"}></TreeNode>
+    </Tree>
+  );
+};
+
 const FileList: FunctionComponent<Props> = (props) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { onClick = noop, removeItem = noop } = props;
   const fileList = props.fileList ?? [];
 
-  return fileList.length > 0 ? (
-    <ListGroup as="ul">
-      {fileList.map((item: File, index) => (
-        <ListGroup.Item key={index} onClick={(event) => onClick(item, event)}>
-          <Row xs={2}>
-            <Col className="p-1" xs={10}>
-              {item.fileName}
-            </Col>
-            <Col xs={2}>
-              <Button
-                className={"float-right"}
-                size={"sm"}
-                variant={"outline-danger"}
-              >
-                x
-              </Button>
-            </Col>
-          </Row>
-        </ListGroup.Item>
-      ))}
-    </ListGroup>
-  ) : (
-    <Card>
-      <Card.Body>No Watched Files</Card.Body>
-    </Card>
+  return (
+    <Container fluid>
+      <Row>
+        <Col>
+          <Text>Watched Files</Text>
+          <FileTree></FileTree>
+        </Col>
+        <Col>TEST</Col>
+      </Row>
+    </Container>
   );
 };
 

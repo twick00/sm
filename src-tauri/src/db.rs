@@ -6,7 +6,11 @@ use diesel::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn add_file_details(conn: &SqliteConnection, file_contents: Vec<u8>, file_path: &str) -> usize {
+pub fn add_file_details<S: Into<String>>(
+  conn: &SqliteConnection,
+  file_contents: Vec<u8>,
+  file_path: S,
+) -> usize {
   println!("create_file_details");
   let timestamp = SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -15,7 +19,7 @@ pub fn add_file_details(conn: &SqliteConnection, file_contents: Vec<u8>, file_pa
 
   let new_file_detail = FileDetail {
     id: None,
-    file_path: file_path.to_string(),
+    file_path: file_path.into(),
     data: file_contents,
     timestamp,
   };
@@ -26,26 +30,26 @@ pub fn add_file_details(conn: &SqliteConnection, file_contents: Vec<u8>, file_pa
     .expect("Error saving new post")
 }
 
-pub fn remove_file_diffs_for_path(conn: &SqliteConnection, file_path: &str) -> usize {
+pub fn remove_file_diffs_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> usize {
   use crate::schema::file_diffs::dsl::file_path as diffs_file_path;
   diesel::delete(file_diffs)
-    .filter(diffs_file_path.eq(file_path))
+    .filter(diffs_file_path.eq(file_path.as_ref()))
     .execute(conn)
     .unwrap()
 }
 
-pub fn remove_file_details_for_path(conn: &SqliteConnection, file_path: &str) -> usize {
+pub fn remove_file_details_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> usize {
   use crate::schema::file_details::dsl::file_path as details_file_path;
   diesel::delete(file_details)
-    .filter(details_file_path.eq(file_path))
+    .filter(details_file_path.eq(file_path.as_ref()))
     .execute(conn)
     .unwrap()
 }
 
-pub fn remove_all_for_path(conn: &SqliteConnection, file_path: &str) -> (usize, usize) {
+pub fn remove_all_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> (usize, usize) {
   (
-    remove_file_diffs_for_path(conn, file_path),
-    remove_file_details_for_path(conn, file_path),
+    remove_file_diffs_for_path(conn, file_path.as_ref()),
+    remove_file_details_for_path(conn, file_path.as_ref()),
   )
 }
 
