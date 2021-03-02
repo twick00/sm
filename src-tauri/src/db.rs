@@ -63,10 +63,7 @@ pub fn insert_file_diff(
   change_event: &str,
 ) {
   use crate::schema::file_details::dsl::*;
-  use crate::schema::file_diffs::dsl::{
-    change_event as fd_change_event, data as fd_data, file_path as fd_file_path, id as fd_id,
-    original_file_id as fd_original_file_id, timestamp as fd_timestamp,
-  };
+  
   println!("insert_file_diff");
   let source_file_data: diesel::QueryResult<(Option<i32>, Vec<u8>)> = file_details
     .select((id, data))
@@ -105,7 +102,7 @@ pub fn insert_file_diff(
 }
 
 pub fn get_file_diffs_for_path(conn: &SqliteConnection, path: &str) -> QueryResult<Vec<FileDiff>> {
-  use crate::schema::file_diffs;
+  
   use crate::schema::file_diffs::dsl::file_path;
   use crate::schema::file_diffs::dsl::timestamp;
   println!("get_file_diffs_for_path");

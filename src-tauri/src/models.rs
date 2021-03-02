@@ -1,8 +1,8 @@
 use crate::schema::*;
-use serde::{Serialize, Serializer};
+
 use std::path::Component;
 use std::path::Path;
-use tauri::plugin::Plugin;
+
 
 #[derive(Debug, Queryable, Insertable)]
 pub struct FileDetail {

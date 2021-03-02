@@ -6,27 +6,25 @@
 extern crate diesel;
 
 use anyhow::Result;
-use crossbeam::channel::{bounded, unbounded, Receiver, Select, Sender};
-use crossbeam::thread::scope;
-use diesel::r2d2::{self, ConnectionManager};
-use diesel::{
-  insert_into, ExpressionMethods, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection,
-};
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use std::borrow::BorrowMut;
-use std::collections::{HashMap, HashSet};
-use std::fs::{metadata, File};
-use std::io::{BufRead, BufReader, Error, Read};
-use std::{io, str};
-use tauri::{execute_promise, Webview};
+use crossbeam::channel::{bounded, unbounded};
 
-use models::FileDetail;
+use diesel::r2d2::{ConnectionManager};
 
-use crate::models::{FileDiff, FileDiffResult};
-use crate::schema::file_details::dsl::file_details;
-use crate::schema::file_diffs::dsl::file_diffs;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+
+use std::collections::{HashSet};
+
+
+
+
+
+
+
+use crate::models::{FileDiff};
+
+
 use crate::tauri_bus::{
-  build_file_change_listener, build_tauri_invoke_handler, build_tauri_setup_handler,
+  build_tauri_invoke_handler, build_tauri_setup_handler,
   ez_buffer_from_file, register_file_watcher, BusEvent, Pool, RequestEvent, ResponseEvent,
 };
 
@@ -42,7 +40,7 @@ fn main() -> Result<()> {
   let db_pool: Pool = Pool::builder().build(ConnectionManager::new(database_url))?;
 
   let (sender, receiver) = unbounded::<BusEvent>();
-  let (request_sender, request_receiver) = bounded::<RequestEvent>(5);
+  let (_request_sender, _request_receiver) = bounded::<RequestEvent>(5);
   let (response_sender, response_receiver) = bounded::<ResponseEvent>(5);
 
   let mut watcher: RecommendedWatcher = register_file_watcher(sender.clone())?;
@@ -125,7 +123,7 @@ fn main() -> Result<()> {
             let watched_file_list: Vec<String> = watched_file_set.clone().into_iter().collect();
             response_sender.send(ResponseEvent::WatchedFileList(watched_file_list));
           }
-          RequestEvent::SelectFile(path) => {
+          RequestEvent::SelectFile(_path) => {
             // Testing RequestEvent::SelectFile
             let t1 = FileDiff {
               id: Some(1),

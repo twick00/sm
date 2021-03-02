@@ -1,32 +1,24 @@
-use std::borrow::BorrowMut;
-use std::fs::{File, metadata};
+use std::fs::{metadata, File};
 use std::io::Read;
-use std::path::PathBuf;
+
 use std::time::Duration;
 
 use anyhow::Result;
-use crossbeam::channel::{after, never, Receiver, select, Select, Sender};
-use crossbeam::thread;
-use diesel::{
-  ExpressionMethods, insert_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection,
-};
+use crossbeam::channel::{after, never, select, Receiver, Sender};
+
 use diesel::r2d2::{self, ConnectionManager};
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use serde::Deserialize;
-use serde_json::Map;
-use tauri::{execute_promise, Webview, WebviewMut};
+use diesel::SqliteConnection;
+use notify::{Event, EventKind, RecommendedWatcher, Watcher};
+
+use tauri::{Webview, WebviewMut};
 
 use crate::db;
-use crate::models::{FileDiff, FileDiffResult};
-use crate::schema::file_details::dsl::file_details;
-use crate::schema::file_diffs::dsl::file_diffs;
-use crate::tauri_bus::BusEvent::Request;
+use crate::models::FileDiff;
 
 pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub mod cmd {
   use serde::Deserialize;
-  use serde_json::Map;
 
   #[allow(non_snake_case)]
   #[derive(Deserialize)]
@@ -98,16 +90,16 @@ fn ez_event_response<F>(
 
 pub fn build_tauri_setup_handler(
   sender: Sender<BusEvent>,
-  response_sender: Sender<ResponseEvent>,
+  _response_sender: Sender<ResponseEvent>,
   response_receiver: Receiver<ResponseEvent>,
 ) -> impl FnMut(&mut Webview, String) {
-  move |webview: &mut Webview, source_window: String| {
-    let mut webview = webview.as_mut();
+  move |webview: &mut Webview, _source_window: String| {
+    let webview = webview.as_mut();
 
     // refreshWatchedFileListRequest handler
     let response_receiver_clone = response_receiver.clone();
     let sender_clone = sender.clone();
-    let mut webview_clone = webview.clone();
+    let webview_clone = webview.clone();
     tauri::event::listen("refreshWatchedFileListRequest", move |_| {
       ez_event_response(
         response_receiver_clone.clone(),
@@ -135,7 +127,7 @@ pub fn build_tauri_setup_handler(
     // selectFileRequest handler
     let response_receiver_clone = response_receiver.clone();
     let sender_clone = sender.clone();
-    let mut webview_clone = webview.clone();
+    let webview_clone = webview.clone();
     tauri::event::listen("selectFileRequest", move |file_name| {
       ez_event_response(
         response_receiver_clone.clone(),
@@ -164,7 +156,7 @@ pub fn build_tauri_setup_handler(
 
 pub fn build_tauri_invoke_handler(
   sender: Sender<BusEvent>,
-  receiver: Receiver<BusEvent>,
+  _receiver: Receiver<BusEvent>,
 ) -> impl FnMut(&mut Webview, &str) -> Result<(), String> {
   move |_webview: &mut Webview, arg: &str| {
     use cmd::Cmd::*;
@@ -175,16 +167,16 @@ pub fn build_tauri_invoke_handler(
           // definitions for your custom commands from Cmd here
           AddWatchedFiles {
             watchedFiles: watched_files,
-            callback,
-            error,
+            callback: _,
+            error: _,
           } => {
             println!("AddWatchedFiles: {:?}", watched_files);
             sender.send(BusEvent::UpdateWatched(watched_files));
           }
           SelectFile {
-            selectFile: select_file,
-            callback,
-            error,
+            selectFile: _select_file,
+            callback: _,
+            error: _,
           } => {}
         }
         Ok(())
@@ -227,7 +219,7 @@ pub fn build_file_change_listener(
           EventKind::Any => println!("Event fired: Any"),
           EventKind::Access(_) => {}
           EventKind::Create(_) => {}
-          EventKind::Modify(p) => {}
+          EventKind::Modify(_p) => {}
           EventKind::Remove(_) => {}
           EventKind::Other => {}
         },
