@@ -18,7 +18,7 @@ notify = "5.0.0-pre.6"
 diesel = { version = "1.4.5", features = [ "sqlite", "r2d2" ] }
 diffy = "0.2.1"
 dotenv = "0.15.0"
-bus = "2.2.3"
+crossbeam = "0.8.0"
 
 [target."cfg(windows)".build-dependencies]
 winres = "0.1"

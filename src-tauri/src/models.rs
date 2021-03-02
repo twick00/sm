@@ -12,7 +12,7 @@ pub struct FileDetail {
   pub timestamp: i32,
 }
 
-#[derive(Debug, Queryable, Insertable, serde::Serialize)]
+#[derive(Clone, Debug, Queryable, Insertable, serde::Serialize)]
 pub struct FileDiff {
   pub id: Option<i32>,
   pub original_file_id: Option<i32>,

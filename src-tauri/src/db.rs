@@ -32,6 +32,7 @@ pub fn add_file_details<S: Into<String>>(
 
 pub fn remove_file_diffs_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> usize {
   use crate::schema::file_diffs::dsl::file_path as diffs_file_path;
+  println!("remove_file_diffs_for_path");
   diesel::delete(file_diffs)
     .filter(diffs_file_path.eq(file_path.as_ref()))
     .execute(conn)
@@ -40,6 +41,7 @@ pub fn remove_file_diffs_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_p
 
 pub fn remove_file_details_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> usize {
   use crate::schema::file_details::dsl::file_path as details_file_path;
+  println!("remove_file_details_for_path");
   diesel::delete(file_details)
     .filter(details_file_path.eq(file_path.as_ref()))
     .execute(conn)
@@ -47,6 +49,7 @@ pub fn remove_file_details_for_path<S: AsRef<str>>(conn: &SqliteConnection, file
 }
 
 pub fn remove_all_for_path<S: AsRef<str>>(conn: &SqliteConnection, file_path: S) -> (usize, usize) {
+  println!("remove_all_for_path");
   (
     remove_file_diffs_for_path(conn, file_path.as_ref()),
     remove_file_details_for_path(conn, file_path.as_ref()),
@@ -105,6 +108,7 @@ pub fn get_file_diffs_for_path(conn: &SqliteConnection, path: &str) -> QueryResu
   use crate::schema::file_diffs;
   use crate::schema::file_diffs::dsl::file_path;
   use crate::schema::file_diffs::dsl::timestamp;
+  println!("get_file_diffs_for_path");
   file_diffs
     .filter(file_path.eq(path))
     .order(timestamp.desc())

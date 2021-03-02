@@ -1,24 +1,26 @@
-use std::sync::mpsc::{Receiver, Sender, SyncSender};
+use std::borrow::BorrowMut;
+use std::fs::{File, metadata};
+use std::io::Read;
+use std::path::PathBuf;
+use std::time::Duration;
 
-use diesel::r2d2::{self, ConnectionManager};
+use anyhow::Result;
+use crossbeam::channel::{after, never, Receiver, select, Select, Sender};
+use crossbeam::thread;
 use diesel::{
-  insert_into, ExpressionMethods, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection,
+  ExpressionMethods, insert_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection,
 };
+use diesel::r2d2::{self, ConnectionManager};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Deserialize;
 use serde_json::Map;
-use tauri::{execute_promise, Webview};
+use tauri::{execute_promise, Webview, WebviewMut};
 
 use crate::db;
 use crate::models::{FileDiff, FileDiffResult};
 use crate::schema::file_details::dsl::file_details;
 use crate::schema::file_diffs::dsl::file_diffs;
-use bus::BusReader;
-use std::fs::{metadata, File};
-use std::io::Read;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use std::thread;
+use crate::tauri_bus::BusEvent::Request;
 
 pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -45,31 +47,127 @@ pub mod cmd {
   }
 }
 
+#[derive(Clone, Debug)]
+pub enum RequestEvent {
+  WatchedFileList(),
+  SelectFile(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum ResponseEvent {
+  WatchedFileList(Vec<String>),
+  SelectFile(Vec<FileDiff>),
+  Error(String),
+}
+
 #[derive(Clone)]
 pub enum BusEvent {
   Base(Event),
   AddedToWatch(String),
   RemovedFromWatch(String),
   UpdateWatched(Vec<String>),
+  Request(RequestEvent),
+  Response(ResponseEvent),
 }
-
-// impl Clone for BusEvent {
-//   fn clone(&self) -> Self {
-//     self
-//   }
-// }
 
 fn handle_file_select(conn: &SqliteConnection, path: String) -> Vec<FileDiff> {
   db::get_file_diffs_for_path(conn, &path).unwrap()
 }
 
+fn ez_event_response<F>(
+  receiver: Receiver<ResponseEvent>,
+  sender: Sender<BusEvent>,
+  webview: WebviewMut,
+  req: RequestEvent,
+  mut func: F,
+) where
+  F: FnMut(WebviewMut, ResponseEvent),
+{
+  sender.send(BusEvent::Request(req)).unwrap();
+  let duration = Some(Duration::from_millis(100));
+  let timeout = duration.map(|d| after(d)).unwrap_or(never());
+  select! {
+    recv(receiver) -> msg => {
+      func(webview, msg.unwrap())
+    }
+    recv(timeout) -> _ => {
+      func(webview, ResponseEvent::Error("TIMEOUT".to_string()))
+    }
+  }
+}
+
+pub fn build_tauri_setup_handler(
+  sender: Sender<BusEvent>,
+  response_sender: Sender<ResponseEvent>,
+  response_receiver: Receiver<ResponseEvent>,
+) -> impl FnMut(&mut Webview, String) {
+  move |webview: &mut Webview, source_window: String| {
+    let mut webview = webview.as_mut();
+
+    // refreshWatchedFileListRequest handler
+    let response_receiver_clone = response_receiver.clone();
+    let sender_clone = sender.clone();
+    let mut webview_clone = webview.clone();
+    tauri::event::listen("refreshWatchedFileListRequest", move |_| {
+      ez_event_response(
+        response_receiver_clone.clone(),
+        sender_clone.clone(),
+        webview_clone.clone(),
+        RequestEvent::WatchedFileList(),
+        move |mut webview, response| match response {
+          ResponseEvent::WatchedFileList(watched_file_list) => {
+            tauri::event::emit(
+              &mut webview,
+              "refreshWatchedFileListResponse",
+              Some(watched_file_list),
+            )
+            .unwrap();
+          }
+          ResponseEvent::Error(error_message) => {
+            println!("REQUEST ERROR: {}", error_message);
+            tauri::event::emit(&mut webview, "error", Some(error_message)).unwrap();
+          }
+          _ => {}
+        },
+      );
+    });
+
+    // selectFileRequest handler
+    let response_receiver_clone = response_receiver.clone();
+    let sender_clone = sender.clone();
+    let mut webview_clone = webview.clone();
+    tauri::event::listen("selectFileRequest", move |file_name| {
+      ez_event_response(
+        response_receiver_clone.clone(),
+        sender_clone.clone(),
+        webview_clone.clone(),
+        RequestEvent::SelectFile(file_name.clone().unwrap()),
+        move |mut webview, response| match response {
+          ResponseEvent::SelectFile(watched_file_list) => {
+            tauri::event::emit(
+              &mut webview,
+              "refreshWatchedFileListResponse",
+              Some(watched_file_list),
+            )
+            .unwrap();
+          }
+          ResponseEvent::Error(error_message) => {
+            println!("REQUEST ERROR: {}", error_message);
+            tauri::event::emit(&mut webview, "error", Some(error_message)).unwrap();
+          }
+          _ => {}
+        },
+      );
+    })
+  }
+}
+
 pub fn build_tauri_invoke_handler(
-  tauri_database_pool: Pool,
-  sender: SyncSender<BusEvent>,
+  sender: Sender<BusEvent>,
+  receiver: Receiver<BusEvent>,
 ) -> impl FnMut(&mut Webview, &str) -> Result<(), String> {
   move |_webview: &mut Webview, arg: &str| {
     use cmd::Cmd::*;
-
     match serde_json::from_str(arg) {
       Err(e) => Err(e.to_string()),
       Ok(command) => {
@@ -80,95 +178,18 @@ pub fn build_tauri_invoke_handler(
             callback,
             error,
           } => {
+            println!("AddWatchedFiles: {:?}", watched_files);
             sender.send(BusEvent::UpdateWatched(watched_files));
           }
           SelectFile {
             selectFile: select_file,
             callback,
             error,
-          } => {
-            println!("selectFile!");
-            let conn = tauri_database_pool.get().unwrap();
-            let result = handle_file_select(&conn, select_file.clone());
-            execute_promise(
-              _webview,
-              move || {
-                Ok(
-                  result
-                    .iter()
-                    .map(|file_diff| file_diff.into())
-                    .collect::<Vec<FileDiffResult>>(),
-                )
-              },
-              callback,
-              error,
-            );
-            println!("{}", select_file);
-          }
+          } => {}
         }
         Ok(())
       }
     }
-  }
-}
-
-// fn event_to_str(wrapped_event: Option<DebouncedEvent>) -> &'static str {
-//   match wrapped_event {
-//     None => "None",
-//     Some(event) => match event {
-//       DebouncedEvent::NoticeWrite(_) => "NoticeWrite",
-//       DebouncedEvent::NoticeRemove(_) => "NoticeRemove",
-//       DebouncedEvent::Create(_) => "Create",
-//       DebouncedEvent::Write(_) => "Write",
-//       DebouncedEvent::Chmod(_) => "Chmod",
-//       DebouncedEvent::Remove(_) => "Remove",
-//       DebouncedEvent::Rename(_, _) => "Rename",
-//       DebouncedEvent::Rescan => "Rescan",
-//       DebouncedEvent::Error(_, _) => "Error",
-//     },
-//   }
-// }
-
-pub fn build_watched_file_change_listener(
-  mut watcher: RecommendedWatcher,
-  watched_file_list: Arc<RwLock<Vec<String>>>,
-  watched_file_receiver: BusReader<BusEvent>,
-  file_change_notifier: SyncSender<BusEvent>,
-) -> impl FnMut() {
-  move || {
-    // Wait forever for new messages
-    // for updated_file_list in watched_file_receiver.iter() {
-    //   println!("updated_file_list");
-    //   let mut has_changed = false;
-    //   // Add non-watched files to watcher
-    //   for path in updated_file_list.iter() {
-    //     if !watched_file_list.read().unwrap().contains(path) {
-    //       let path_metadata = metadata(path).unwrap();
-    //
-    //       if path_metadata.is_dir() {
-    //         watcher.watch(path, RecursiveMode::Recursive);
-    //       } else if path_metadata.is_file() {
-    //         watcher.watch(path, RecursiveMode::NonRecursive);
-    //
-    //         // Manually file `Create` event since the Watcher doesn't do it for us on adding the path
-    //         file_change_notifier.send(BusEvent::AddedToWatch(path.clone()));
-    //       }
-    //       watched_file_list.write().unwrap().push(path.clone());
-    //       has_changed = true;
-    //     }
-    //   }
-    //
-    //   // Need to clone to remove the indexes from the inside the loop below
-    //   let cloned_watched_file_list = watched_file_list.read().unwrap().clone();
-    //
-    //   // Remove dropped files from watcher
-    //   for (index, watched_path) in cloned_watched_file_list.iter().enumerate() {
-    //     if !&updated_file_list.contains(watched_path) {
-    //       watcher.unwatch(&watched_path);
-    //       watched_file_list.write().unwrap().remove(index);
-    //     }
-    //   }
-    // }
   }
 }
 
@@ -183,9 +204,20 @@ pub fn ez_buffer_from_file<S: AsRef<str>>(path: S, event: &str) -> Vec<u8> {
   buffer
 }
 
+pub fn register_file_watcher(sender: Sender<BusEvent>) -> notify::Result<RecommendedWatcher> {
+  Watcher::new_immediate(move |res| {
+    match res {
+      Ok(event) => {
+        sender.send(BusEvent::Base(event));
+      }
+      Err(e) => println!("watch error: {:?}", e),
+    };
+  })
+}
+
 pub fn build_file_change_listener(
   pool: &Pool,
-  mut file_change_listener: BusReader<BusEvent>,
+  file_change_listener: Receiver<BusEvent>,
 ) -> impl FnMut() {
   let file_change_pool = pool.clone();
   move || {
@@ -209,18 +241,5 @@ pub fn build_file_change_listener(
         _ => {}
       }
     }
-  }
-}
-
-pub fn handle_file_change_event(pool: &Pool, event: Event, sender: SyncSender<BusEvent>) {
-  let paths = event.paths;
-  // TODO: Handle events
-  match event.kind {
-    EventKind::Any => {}
-    EventKind::Access(_) => {}
-    EventKind::Create(_) => {}
-    EventKind::Modify(_) => {}
-    EventKind::Remove(_) => {}
-    EventKind::Other => {}
   }
 }
