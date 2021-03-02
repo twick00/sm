@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
 import * as dialog from "tauri/api/dialog";
 import * as req from "tauri/api/tauri";
+import { emit, listen } from 'tauri/api/event'
 import { html } from "diff2html";
 import ReactHtmlParser from "react-html-parser";
 import FileList from "./components/FileList";
-import { castArray, find } from "lodash";
+import { castArray, find, union } from "lodash";
 import { fileNameFromPath } from "./utils/fileUtils";
 import { Button, Navbar } from "@blueprintjs/core";
 import Navigation from "./components/Navigation";
 import { Container, Row, Col } from "react-grid-system";
+import path from 'path';
 
 type FileDetails = {
   path: string;
@@ -26,6 +28,12 @@ function App() {
     selectedFile: undefined,
     selectedFileDetails: undefined,
   });
+
+  useEffect(() => {
+    listen("refreshWatchedFileListResponse", (vals) => {
+      console.log("Found refreshWatchedFileListResponse!: ", vals);
+    })
+  }, [])
 
   const convertResult = (input: {
     data?: number[];
@@ -57,53 +65,22 @@ function App() {
       });
   }, [state.watchedFiles]);
 
-  useEffect(() => {
-    if (state.selectedFile) {
-      req
-        .promisified({ cmd: "selectFile", selectFile: state.selectedFile.path })
-        .then((res: any) => {
-          console.log("Event: selectFile");
-          if (Array.isArray(res)) {
-            const result = res.map((v: any) => convertResult(v as any))[1];
-            // html(result.data)
-            console.log(html(result.data as string));
-            setState({
-              ...state,
-              selectedFileDetails: JSON.stringify(result, null, 2),
-            });
-            console.log(result);
-            return result;
-          }
-          return res;
-        })
-        .catch((e) => {
-          console.log("Error in selectedFile useEffect: ", e);
-        });
+  const formatFileDetails = (pathVal: string): FileDetails => {
+    return {
+      fileName: path.parse(pathVal).base,
+      path: pathVal
     }
-  }, [state.selectedFile]);
+  }
 
   const buildAddButton = (options: dialog.OpenDialogOptions) => async () => {
-    const newWatchedPaths = await dialog.open(options);
+    const newWatchedFiles = await dialog.open(options);
+    let watchedFiles = union(state.watchedFiles, castArray(newWatchedFiles).map(formatFileDetails))
 
-    setState(({ watchedFiles }) => {
-      const newDedupedWatchedPaths = castArray(newWatchedPaths)
-        .filter((newPath) => {
-          return !find(watchedFiles, ({ path }) => path === newPath);
-        })
-        .map((path) => {
-          return {
-            path,
-            fileName: fileNameFromPath(path),
-          };
-        });
-      const newFileList = [...watchedFiles, ...newDedupedWatchedPaths];
-      return {
-        watchedFiles: newFileList,
-        selectedFile: state.selectedFile
-          ? state.selectedFile
-          : newFileList[0] ?? undefined,
-      };
-    });
+    console.log('Sending to `addWatchedFiles`')
+    setState({
+      ...state,
+      watchedFiles
+    })
   };
 
   const addFilesButton = buildAddButton({
@@ -123,10 +100,15 @@ function App() {
     });
   };
 
+  const refresh = () => {
+    emit("refreshWatchedFileListRequest", "");
+  }
+
   return (
     <>
-      <Navigation />
-      <FileList />
+      <Navigation addFilesButton={addFilesButton} />
+      <FileList fileList={state.watchedFiles} />
+      <Button onClick={refresh}>Refresh</Button>
     </>
   );
 }

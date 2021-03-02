@@ -1,5 +1,5 @@
 import React, { FunctionComponent } from "react";
-import { noop } from "lodash";
+import { noop, setWith } from "lodash";
 import { HTMLTable, ITreeNode, Text, Tree, TreeNode } from "@blueprintjs/core";
 import { Col, Container, Row } from "react-grid-system";
 import { Table } from "@blueprintjs/table";
@@ -31,13 +31,13 @@ const t: ITreeNode[] = [
     label: "Folder 0",
   },
   {
-    id: 0,
+    id: 1,
     hasCaret: true,
     icon: "folder-close",
     label: "Folder 0",
   },
   {
-    id: 0,
+    id: 2,
     hasCaret: true,
     icon: "folder-close",
     label: "Folder 0",
